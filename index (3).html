@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>暗記アプリ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ナビゲーション -->
+    <nav class="bottom-nav">
+        <button class="nav-btn active" data-view="folders">
+            <span>📁</span>
+            <span>フォルダ</span>
+        </button>
+        <button class="nav-btn" data-view="create">
+            <span>➕</span>
+            <span>作成</span>
+        </button>
+        <button class="nav-btn" data-view="stats">
+            <span>📊</span>
+            <span>統計</span>
+        </button>
+    </nav>
+
+    <!-- フォルダ一覧画面 -->
+    <div id="folders-view" class="view active">
+        <div class="header">
+            <h1>暗記アプリ</h1>
+            <button id="add-folder-btn" class="icon-btn">➕ フォルダ追加</button>
+        </div>
+        <div id="folders-list" class="folders-list"></div>
+    </div>
+
+    <!-- カード作成画面 -->
+    <div id="create-view" class="view">
+        <div class="header">
+            <h1>カード作成</h1>
+        </div>
+        <div class="create-form">
+            <div class="form-group">
+                <label>フォルダ選択</label>
+                <select id="folder-select" class="input"></select>
+            </div>
+            
+            <div class="form-group">
+                <label>モード選択</label>
+                <div class="mode-tabs">
+                    <button class="mode-tab active" data-mode="fillblank">穴埋め</button>
+                    <button class="mode-tab" data-mode="fulltext">全文暗記</button>
+                </div>
+            </div>
+
+            <div id="fillblank-mode" class="mode-content active">
+                <div class="form-group">
+                    <label>問題文</label>
+                    <textarea id="question" class="input" rows="4" placeholder="例：所得税法第○条では、【居住者】に対して【所得税】を課すと規定されている。&#10;&#10;【】で囲んだ部分が赤シートで隠れます"></textarea>
+                </div>
+            </div>
+
+            <div id="fulltext-mode" class="mode-content">
+                <div class="form-group">
+                    <label>タイトル</label>
+                    <input type="text" id="title-fulltext" class="input" placeholder="例：所得税法第7条">
+                </div>
+                <div class="form-group">
+                    <label>暗記する文章</label>
+                    <textarea id="fulltext" class="input" rows="6" placeholder="条文や定義を入力してください"></textarea>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>タグ（カンマ区切り）</label>
+                <input type="text" id="tags" class="input" placeholder="例：所得税法, 第7条, 要件">
+            </div>
+
+            <button id="save-card-btn" class="primary-btn">カードを保存</button>
+        </div>
+    </div>
+
+    <!-- 統計画面（後で実装） -->
+    <div id="stats-view" class="view">
+        <div class="header">
+            <h1>統計</h1>
+        </div>
+        <div class="stats-content">
+            <p>統計機能は後ほど実装します</p>
+        </div>
+    </div>
+
+    <!-- カード一覧画面 -->
+    <div id="cards-list-view" class="view">
+        <div class="header">
+            <button id="back-to-folders" class="back-btn">← 戻る</button>
+            <h1 id="folder-title"></h1>
+            <button id="start-study-btn" class="icon-btn">学習開始</button>
+        </div>
+        <div id="cards-list" class="cards-list"></div>
+    </div>
+
+    <!-- 学習画面 -->
+    <div id="study-view" class="view">
+        <div class="header">
+            <button id="back-to-cards" class="back-btn">← 終了</button>
+            <div class="progress">
+                <span id="current-card">1</span> / <span id="total-cards">10</span>
+            </div>
+            <div id="timer-display" class="timer">--:--</div>
+        </div>
+
+        <div class="study-content">
+            <div id="card-display" class="card-display">
+                <!-- カード内容がここに表示される -->
+            </div>
+
+            <div class="swipe-hint">
+                ← スワイプで戻る | スワイプで進む →
+            </div>
+        </div>
+
+        <div class="study-controls">
+            <button id="prev-blank-btn" class="control-btn">← 前へ</button>
+            <button id="next-blank-btn" class="control-btn">次へ →</button>
+        </div>
+    </div>
+
+    <!-- タイマー設定モーダル -->
+    <div id="timer-modal" class="modal">
+        <div class="modal-content">
+            <h2>タイマー設定</h2>
+            <div class="timer-presets">
+                <button class="preset-btn" data-minutes="10">10分</button>
+                <button class="preset-btn" data-minutes="15">15分</button>
+                <button class="preset-btn" data-minutes="30">30分</button>
+            </div>
+            <div class="custom-timer">
+                <input type="number" id="custom-minutes" min="1" max="120" placeholder="分">
+                <button id="custom-timer-btn">カスタム設定</button>
+            </div>
+            <button id="no-timer-btn" class="secondary-btn">タイマーなしで開始</button>
+            <button id="close-timer-modal" class="close-btn">キャンセル</button>
+        </div>
+    </div>
+
+    <!-- フォルダ作成モーダル -->
+    <div id="folder-modal" class="modal">
+        <div class="modal-content">
+            <h2>新しいフォルダ</h2>
+            <input type="text" id="folder-name" class="input" placeholder="フォルダ名を入力">
+            <div class="modal-buttons">
+                <button id="save-folder-btn" class="primary-btn">作成</button>
+                <button id="close-folder-modal" class="secondary-btn">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
