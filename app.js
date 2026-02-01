@@ -8,12 +8,12 @@
 // 3. Firestore Database を作成
 // 4. プロジェクト設定から設定情報をコピー
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAqeY7SrrXx_sVgx87UqNkMhxuBNSeKuTQ",
+    authDomain: "memorize-app-d0b24.firebaseapp.com",
+    projectId: "memorize-app-d0b24",
+    storageBucket: "memorize-app-d0b24.firebasestorage.app",
+    messagingSenderId: "768071173541",
+    appId: "1:768071173541:web:6387a7dde7a9de1f92944c"
 };
 
 // Firebase初期化
