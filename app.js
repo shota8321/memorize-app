@@ -1,4 +1,46 @@
+// =============================================
+// Firebase設定
+// =============================================
+// 注意: 以下の設定を自分のFirebaseプロジェクトの設定に置き換えてください
+// Firebase Console (https://console.firebase.google.com/) で:
+// 1. プロジェクトを作成
+// 2. Authentication > Sign-in method > メール/パスワード を有効化
+// 3. Firestore Database を作成
+// 4. プロジェクト設定から設定情報をコピー
+const firebaseConfig = {
+    apiKey: "AIzaSyAqeY7SrrXx_sVgx87UqNkMhxuBNSeKuTQ",
+    authDomain: "memorize-app-d0b24.firebaseapp.com",
+    projectId: "memorize-app-d0b24",
+    storageBucket: "memorize-app-d0b24.firebasestorage.app",
+    messagingSenderId: "768071173541",
+    appId: "1:768071173541:web:6387a7dde7a9de1f92944c"
+};
+
+// Firebase初期化
+let app, auth, db;
+let currentUser = null;
+
+function initFirebase() {
+    try {
+        app = firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+        db = firebase.firestore();
+
+        // オフライン対応
+        db.enablePersistence().catch((err) => {
+            console.log('Offline persistence error:', err);
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Firebase init error:', error);
+        return false;
+    }
+}
+
+// =============================================
 // データ構造
+// =============================================
 let folders = [];
 let cards = [];
 let currentFolder = null;
@@ -10,39 +52,251 @@ let studyStartTime = null;
 let timerSeconds = 0;
 let timerEnabled = false;
 
-// LocalStorageからデータ読み込み
-function loadData() {
+// =============================================
+// 認証機能
+// =============================================
+function setupAuthListeners() {
+    // タブ切り替え
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(`${tabName}-form`).classList.add('active');
+            hideAuthError();
+        });
+    });
+
+    // ログインフォーム
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+
+        showAuthLoading(true);
+        hideAuthError();
+
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+        } catch (error) {
+            showAuthError(getAuthErrorMessage(error.code));
+        }
+        showAuthLoading(false);
+    });
+
+    // 新規登録フォーム
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+        const passwordConfirm = document.getElementById('register-password-confirm').value;
+
+        if (password !== passwordConfirm) {
+            showAuthError('パスワードが一致しません');
+            return;
+        }
+
+        showAuthLoading(true);
+        hideAuthError();
+
+        try {
+            await auth.createUserWithEmailAndPassword(email, password);
+        } catch (error) {
+            showAuthError(getAuthErrorMessage(error.code));
+        }
+        showAuthLoading(false);
+    });
+
+    // ログアウトボタン
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+        if (confirm('ログアウトしますか？')) {
+            await auth.signOut();
+        }
+    });
+
+    // 認証状態の監視
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            currentUser = user;
+            showMainApp();
+            loadDataFromFirestore();
+        } else {
+            currentUser = null;
+            showAuthView();
+        }
+    });
+}
+
+function getAuthErrorMessage(code) {
+    const messages = {
+        'auth/email-already-in-use': 'このメールアドレスは既に登録されています',
+        'auth/invalid-email': '無効なメールアドレスです',
+        'auth/operation-not-allowed': 'メール/パスワード認証が無効です',
+        'auth/weak-password': 'パスワードは6文字以上にしてください',
+        'auth/user-disabled': 'このアカウントは無効になっています',
+        'auth/user-not-found': 'アカウントが見つかりません',
+        'auth/wrong-password': 'パスワードが正しくありません',
+        'auth/invalid-credential': 'メールアドレスまたはパスワードが正しくありません',
+        'auth/too-many-requests': 'ログイン試行回数が多すぎます。しばらくお待ちください'
+    };
+    return messages[code] || 'エラーが発生しました';
+}
+
+function showAuthError(message) {
+    const errorDiv = document.getElementById('auth-error');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+}
+
+function hideAuthError() {
+    document.getElementById('auth-error').style.display = 'none';
+}
+
+function showAuthLoading(show) {
+    document.getElementById('auth-loading').style.display = show ? 'block' : 'none';
+}
+
+function showAuthView() {
+    document.getElementById('auth-view').classList.remove('hidden');
+    document.getElementById('main-app').classList.add('hidden');
+}
+
+function showMainApp() {
+    document.getElementById('auth-view').classList.add('hidden');
+    document.getElementById('main-app').classList.remove('hidden');
+}
+
+// =============================================
+// Firestoreデータ同期
+// =============================================
+async function loadDataFromFirestore() {
+    if (!currentUser) return;
+
+    try {
+        // フォルダ読み込み
+        const foldersSnapshot = await db.collection('users').doc(currentUser.uid)
+            .collection('folders').orderBy('createdAt').get();
+
+        folders = [];
+        foldersSnapshot.forEach(doc => {
+            folders.push({ id: doc.id, ...doc.data() });
+        });
+
+        // フォルダがなければデフォルトを作成
+        if (folders.length === 0) {
+            const defaultFolder = {
+                name: 'デフォルト',
+                createdAt: new Date().toISOString()
+            };
+            const docRef = await db.collection('users').doc(currentUser.uid)
+                .collection('folders').add(defaultFolder);
+            folders.push({ id: docRef.id, ...defaultFolder });
+        }
+
+        // カード読み込み
+        const cardsSnapshot = await db.collection('users').doc(currentUser.uid)
+            .collection('cards').orderBy('createdAt').get();
+
+        cards = [];
+        cardsSnapshot.forEach(doc => {
+            cards.push({ id: doc.id, ...doc.data() });
+        });
+
+        renderFolders();
+        updateFolderSelect();
+
+    } catch (error) {
+        console.error('Data load error:', error);
+        // フォールバック: ローカルストレージから読み込み
+        loadDataFromLocalStorage();
+    }
+}
+
+function loadDataFromLocalStorage() {
     const savedFolders = localStorage.getItem('folders');
     const savedCards = localStorage.getItem('cards');
-    
+
     if (savedFolders) {
         folders = JSON.parse(savedFolders);
     } else {
-        // 初期フォルダを作成
         folders = [{
-            id: Date.now(),
+            id: 'default-' + Date.now(),
             name: 'デフォルト',
             createdAt: new Date().toISOString()
         }];
-        saveData();
     }
-    
+
     if (savedCards) {
         cards = JSON.parse(savedCards);
     }
-}
 
-// データ保存
-function saveData() {
-    localStorage.setItem('folders', JSON.stringify(folders));
-    localStorage.setItem('cards', JSON.stringify(cards));
-}
-
-// 初期化
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
     renderFolders();
     updateFolderSelect();
+}
+
+async function saveFolder(folder) {
+    if (!currentUser) {
+        // ローカルストレージに保存
+        localStorage.setItem('folders', JSON.stringify(folders));
+        return;
+    }
+
+    try {
+        if (folder.id && !folder.id.toString().startsWith('default-')) {
+            await db.collection('users').doc(currentUser.uid)
+                .collection('folders').doc(folder.id).set({
+                    name: folder.name,
+                    createdAt: folder.createdAt
+                });
+        } else {
+            const docRef = await db.collection('users').doc(currentUser.uid)
+                .collection('folders').add({
+                    name: folder.name,
+                    createdAt: folder.createdAt
+                });
+            folder.id = docRef.id;
+        }
+    } catch (error) {
+        console.error('Folder save error:', error);
+    }
+}
+
+async function saveCardToFirestore(card) {
+    if (!currentUser) {
+        localStorage.setItem('cards', JSON.stringify(cards));
+        return;
+    }
+
+    try {
+        const cardData = { ...card };
+        delete cardData.id;
+
+        const docRef = await db.collection('users').doc(currentUser.uid)
+            .collection('cards').add(cardData);
+        card.id = docRef.id;
+    } catch (error) {
+        console.error('Card save error:', error);
+    }
+}
+
+// =============================================
+// 初期化
+// =============================================
+document.addEventListener('DOMContentLoaded', () => {
+    const firebaseReady = initFirebase();
+
+    if (firebaseReady && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        setupAuthListeners();
+    } else {
+        // Firebase未設定の場合はローカルモードで動作
+        console.log('Firebase not configured. Running in local mode.');
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('main-app').classList.remove('hidden');
+        document.getElementById('logout-btn').style.display = 'none';
+        loadDataFromLocalStorage();
+    }
+
     setupEventListeners();
 });
 
@@ -137,9 +391,9 @@ function switchView(viewName) {
 function renderFolders() {
     const foldersList = document.getElementById('folders-list');
     foldersList.innerHTML = '';
-    
+
     folders.forEach(folder => {
-        const cardCount = cards.filter(c => c.folderId === folder.id).length;
+        const cardCount = cards.filter(c => String(c.folderId) === String(folder.id)).length;
         
         const folderItem = document.createElement('div');
         folderItem.className = 'folder-item';
@@ -153,21 +407,21 @@ function renderFolders() {
 }
 
 // フォルダ作成
-function createFolder() {
+async function createFolder() {
     const name = document.getElementById('folder-name').value.trim();
     if (!name) return;
-    
+
     const newFolder = {
-        id: Date.now(),
+        id: null,
         name: name,
         createdAt: new Date().toISOString()
     };
-    
+
     folders.push(newFolder);
-    saveData();
+    await saveFolder(newFolder);
     renderFolders();
     updateFolderSelect();
-    
+
     document.getElementById('folder-modal').classList.remove('active');
     document.getElementById('folder-name').value = '';
 }
@@ -186,22 +440,22 @@ function updateFolderSelect() {
 }
 
 // カード保存
-function saveCard() {
-    const folderId = parseInt(document.getElementById('folder-select').value);
+async function saveCard() {
+    const folderId = document.getElementById('folder-select').value;
     const activeMode = document.querySelector('.mode-tab.active').dataset.mode;
     const tagsInput = document.getElementById('tags').value;
-    
+
     let card;
-    
+
     if (activeMode === 'fillblank') {
         const question = document.getElementById('question').value.trim();
         if (!question) {
             alert('問題文を入力してください');
             return;
         }
-        
+
         card = {
-            id: Date.now(),
+            id: null,
             folderId: folderId,
             mode: 'fillblank',
             question: question,
@@ -211,14 +465,14 @@ function saveCard() {
     } else {
         const title = document.getElementById('title-fulltext').value.trim();
         const fulltext = document.getElementById('fulltext').value.trim();
-        
+
         if (!fulltext) {
             alert('暗記する文章を入力してください');
             return;
         }
-        
+
         card = {
-            id: Date.now(),
+            id: null,
             folderId: folderId,
             mode: 'fulltext',
             title: title || '無題',
@@ -227,23 +481,24 @@ function saveCard() {
             createdAt: new Date().toISOString()
         };
     }
-    
+
     cards.push(card);
-    saveData();
-    
+    await saveCardToFirestore(card);
+
     // フォーム初期化
     document.getElementById('question').value = '';
     document.getElementById('title-fulltext').value = '';
     document.getElementById('fulltext').value = '';
     document.getElementById('tags').value = '';
-    
+
     alert('カードを保存しました！');
 }
 
 // カード一覧表示
 function showCardsListView(folder) {
     currentFolder = folder;
-    const folderCards = cards.filter(c => c.folderId === folder.id);
+    // IDは文字列で比較（Firestore対応）
+    const folderCards = cards.filter(c => String(c.folderId) === String(folder.id));
     
     document.getElementById('folder-title').textContent = folder.name;
     
@@ -286,7 +541,7 @@ function showCardsListView(folder) {
 
 // 学習開始（タイマー設定画面表示）
 function startStudy() {
-    const folderCards = cards.filter(c => c.folderId === currentFolder.id);
+    const folderCards = cards.filter(c => String(c.folderId) === String(currentFolder.id));
     if (folderCards.length === 0) {
         alert('カードがありません');
         return;
