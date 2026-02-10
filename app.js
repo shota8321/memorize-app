@@ -280,6 +280,39 @@ async function saveCardToFirestore(card) {
     }
 }
 
+// カード更新
+async function updateCardInFirestore(card) {
+    if (!currentUser) {
+        localStorage.setItem('cards', JSON.stringify(cards));
+        return;
+    }
+
+    try {
+        const cardData = { ...card };
+        delete cardData.id;
+
+        await db.collection('users').doc(currentUser.uid)
+            .collection('cards').doc(card.id).set(cardData);
+    } catch (error) {
+        console.error('Card update error:', error);
+    }
+}
+
+// カード削除
+async function deleteCardFromFirestore(cardId) {
+    if (!currentUser) {
+        localStorage.setItem('cards', JSON.stringify(cards));
+        return;
+    }
+
+    try {
+        await db.collection('users').doc(currentUser.uid)
+            .collection('cards').doc(cardId).delete();
+    } catch (error) {
+        console.error('Card delete error:', error);
+    }
+}
+
 // =============================================
 // 初期化
 // =============================================
@@ -376,6 +409,13 @@ function setupEventListeners() {
 
     // スワイプ操作
     setupSwipeControls();
+
+    // 編集モーダル
+    document.getElementById('update-card-btn').addEventListener('click', updateCard);
+    document.getElementById('delete-card-btn').addEventListener('click', deleteCard);
+    document.getElementById('close-edit-modal').addEventListener('click', () => {
+        document.getElementById('edit-card-modal').classList.remove('active');
+    });
 }
 
 // ビュー切り替え
@@ -499,25 +539,26 @@ function showCardsListView(folder) {
     currentFolder = folder;
     // IDは文字列で比較（Firestore対応）
     const folderCards = cards.filter(c => String(c.folderId) === String(folder.id));
-    
+
     document.getElementById('folder-title').textContent = folder.name;
-    
+
     const cardsList = document.getElementById('cards-list');
     cardsList.innerHTML = '';
-    
+
     if (folderCards.length === 0) {
         cardsList.innerHTML = '<p style="text-align:center;color:#999;padding:40px 0;">カードがありません</p>';
     } else {
         folderCards.forEach(card => {
             const cardItem = document.createElement('div');
             cardItem.className = 'card-item';
-            
+
             const modeBadge = card.mode === 'fillblank' ? '穴埋め' : '全文暗記';
-            const preview = card.mode === 'fillblank' 
-                ? card.question.substring(0, 50) 
+            const preview = card.mode === 'fillblank'
+                ? card.question.substring(0, 50)
                 : `${card.title}: ${card.fulltext.substring(0, 50)}`;
-            
+
             cardItem.innerHTML = `
+                <button class="card-edit-btn" data-card-id="${card.id}">編集</button>
                 <div class="card-item-header">
                     <span class="card-mode-badge">${modeBadge}</span>
                 </div>
@@ -528,15 +569,93 @@ function showCardsListView(folder) {
                     </div>
                 ` : ''}
             `;
-            
+
+            // 編集ボタンのイベント
+            cardItem.querySelector('.card-edit-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                openEditModal(card);
+            });
+
             cardsList.appendChild(cardItem);
         });
     }
-    
+
     document.getElementById('cards-list-view').classList.add('active');
     document.querySelectorAll('.view').forEach(v => {
         if (v.id !== 'cards-list-view') v.classList.remove('active');
     });
+}
+
+// 編集モーダルを開く
+function openEditModal(card) {
+    document.getElementById('edit-card-id').value = card.id;
+    document.getElementById('edit-card-mode').value = card.mode;
+    document.getElementById('edit-tags').value = card.tags ? card.tags.join(', ') : '';
+
+    if (card.mode === 'fillblank') {
+        document.getElementById('edit-fillblank-section').style.display = 'block';
+        document.getElementById('edit-fulltext-section').style.display = 'none';
+        document.getElementById('edit-question').value = card.question;
+    } else {
+        document.getElementById('edit-fillblank-section').style.display = 'none';
+        document.getElementById('edit-fulltext-section').style.display = 'block';
+        document.getElementById('edit-title').value = card.title;
+        document.getElementById('edit-fulltext').value = card.fulltext;
+    }
+
+    document.getElementById('edit-card-modal').classList.add('active');
+}
+
+// カード更新
+async function updateCard() {
+    const cardId = document.getElementById('edit-card-id').value;
+    const mode = document.getElementById('edit-card-mode').value;
+    const tagsInput = document.getElementById('edit-tags').value;
+
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    if (mode === 'fillblank') {
+        const question = document.getElementById('edit-question').value.trim();
+        if (!question) {
+            alert('問題文を入力してください');
+            return;
+        }
+        card.question = question;
+    } else {
+        const title = document.getElementById('edit-title').value.trim();
+        const fulltext = document.getElementById('edit-fulltext').value.trim();
+        if (!fulltext) {
+            alert('暗記する文章を入力してください');
+            return;
+        }
+        card.title = title || '無題';
+        card.fulltext = fulltext;
+    }
+
+    card.tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : [];
+
+    await updateCardInFirestore(card);
+    document.getElementById('edit-card-modal').classList.remove('active');
+    showCardsListView(currentFolder);
+    alert('カードを更新しました！');
+}
+
+// カード削除
+async function deleteCard() {
+    if (!confirm('このカードを削除しますか？')) return;
+
+    const cardId = document.getElementById('edit-card-id').value;
+    const cardIndex = cards.findIndex(c => c.id === cardId);
+
+    if (cardIndex !== -1) {
+        cards.splice(cardIndex, 1);
+        await deleteCardFromFirestore(cardId);
+    }
+
+    document.getElementById('edit-card-modal').classList.remove('active');
+    showCardsListView(currentFolder);
+    alert('カードを削除しました');
 }
 
 // 学習開始（タイマー設定画面表示）
@@ -670,25 +789,85 @@ function displayFullTextCard(card, display) {
     currentBlankIndex = 0;
 }
 
-// スワイプ操作設定
+// スワイプ操作・長押し設定
 function setupSwipeControls() {
     const display = document.getElementById('card-display');
     let touchStartX = 0;
     let touchEndX = 0;
-    
+    let longPressTimer = null;
+    let longPressInterval = null;
+    let isLongPress = false;
+
+    // タッチ開始
     display.addEventListener('touchstart', (e) => {
         touchStartX = e.changedTouches[0].screenX;
+        isLongPress = false;
+
+        // 長押し検出（500ms後に開始）
+        longPressTimer = setTimeout(() => {
+            isLongPress = true;
+            // 長押し中は100msごとに次を表示
+            longPressInterval = setInterval(() => {
+                revealNextItem();
+            }, 100);
+        }, 500);
     });
-    
+
+    // タッチ移動（スワイプ検出のためタイマーをクリア）
+    display.addEventListener('touchmove', (e) => {
+        const currentX = e.changedTouches[0].screenX;
+        if (Math.abs(currentX - touchStartX) > 20) {
+            clearTimeout(longPressTimer);
+            clearInterval(longPressInterval);
+        }
+    });
+
+    // タッチ終了
     display.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer);
+        clearInterval(longPressInterval);
+
         touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
+
+        if (!isLongPress) {
+            handleSwipe();
+        }
+        isLongPress = false;
     });
-    
+
+    // タッチキャンセル
+    display.addEventListener('touchcancel', () => {
+        clearTimeout(longPressTimer);
+        clearInterval(longPressInterval);
+        isLongPress = false;
+    });
+
+    // クリックで1つ表示（PC用）
+    display.addEventListener('click', (e) => {
+        // blank要素やfulltext-char要素のクリックは除外
+        if (!e.target.classList.contains('blank') && !e.target.classList.contains('fulltext-char')) {
+            revealNextItem();
+        }
+    });
+
+    // blank/charを直接クリックで表示
+    display.addEventListener('click', (e) => {
+        if (e.target.classList.contains('blank') && e.target.classList.contains('hidden')) {
+            e.target.classList.remove('hidden');
+            e.target.classList.add('revealed');
+            currentBlankIndex = parseInt(e.target.dataset.index) + 1;
+        }
+        if (e.target.classList.contains('fulltext-char') && e.target.classList.contains('hidden')) {
+            e.target.classList.remove('hidden');
+            e.target.classList.add('revealed');
+            currentBlankIndex = parseInt(e.target.dataset.index) + 1;
+        }
+    });
+
     function handleSwipe() {
         const swipeThreshold = 50;
         const diff = touchEndX - touchStartX;
-        
+
         if (Math.abs(diff) > swipeThreshold) {
             if (diff > 0) {
                 // 右スワイプ：前に戻る
@@ -699,10 +878,32 @@ function setupSwipeControls() {
             }
         }
     }
-    
+
     // ボタンでも操作可能
     document.getElementById('prev-blank-btn').addEventListener('click', revealPrevious);
     document.getElementById('next-blank-btn').addEventListener('click', revealNext);
+}
+
+// 1つだけ表示（長押し・クリック用）
+function revealNextItem() {
+    const card = currentStudyCards[currentCardIndex];
+    if (!card) return;
+
+    if (card.mode === 'fillblank') {
+        const blanks = document.querySelectorAll('.blank');
+        if (currentBlankIndex < blanks.length) {
+            blanks[currentBlankIndex].classList.remove('hidden');
+            blanks[currentBlankIndex].classList.add('revealed');
+            currentBlankIndex++;
+        }
+    } else {
+        const chars = document.querySelectorAll('.fulltext-char');
+        if (currentBlankIndex < chars.length) {
+            chars[currentBlankIndex].classList.remove('hidden');
+            chars[currentBlankIndex].classList.add('revealed');
+            currentBlankIndex++;
+        }
+    }
 }
 
 // 次を表示
