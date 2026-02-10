@@ -274,7 +274,10 @@ textarea.input {
 }
 
 .study-content {
-    padding: 20px 0;
+    padding: 10px 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
 }
 
 .card-display {
@@ -282,12 +285,12 @@ textarea.input {
     padding: 30px 20px;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    min-height: 400px;
+    min-height: 50vh;
     font-size: 18px;
     line-height: 1.8;
     color: #333;
     position: relative;
-    touch-action: pan-y;
+    touch-action: manipulation;
 }
 
 .blank {

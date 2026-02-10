@@ -791,97 +791,107 @@ function displayFullTextCard(card, display) {
 
 // スワイプ操作・長押し設定
 function setupSwipeControls() {
+    const studyContent = document.querySelector('.study-content');
     const display = document.getElementById('card-display');
     let touchStartX = 0;
+    let touchStartY = 0;
     let touchEndX = 0;
     let longPressTimer = null;
     let longPressInterval = null;
     let isLongPress = false;
 
-    // タッチ開始
-    display.addEventListener('touchstart', (e) => {
+    // 学習コンテンツ全体でタッチイベントを処理
+    studyContent.addEventListener('touchstart', (e) => {
         touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
         isLongPress = false;
 
-        // 長押し検出（500ms後に開始）
+        // 長押し検出（300ms後に開始）
         longPressTimer = setTimeout(() => {
             isLongPress = true;
-            // 長押し中は100msごとに次を表示
+            // 最初に1つ表示
+            revealNextItem();
+            // 長押し中は80msごとに次を表示
             longPressInterval = setInterval(() => {
                 revealNextItem();
-            }, 100);
-        }, 500);
-    });
+            }, 80);
+        }, 300);
+    }, { passive: true });
 
     // タッチ移動（スワイプ検出のためタイマーをクリア）
-    display.addEventListener('touchmove', (e) => {
+    studyContent.addEventListener('touchmove', (e) => {
         const currentX = e.changedTouches[0].screenX;
-        if (Math.abs(currentX - touchStartX) > 20) {
+        const currentY = e.changedTouches[0].screenY;
+        if (Math.abs(currentX - touchStartX) > 30 || Math.abs(currentY - touchStartY) > 30) {
             clearTimeout(longPressTimer);
             clearInterval(longPressInterval);
         }
-    });
+    }, { passive: true });
 
     // タッチ終了
-    display.addEventListener('touchend', (e) => {
+    studyContent.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
         clearInterval(longPressInterval);
 
         touchEndX = e.changedTouches[0].screenX;
 
         if (!isLongPress) {
-            handleSwipe();
+            const diff = touchEndX - touchStartX;
+            const swipeThreshold = 50;
+
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0) {
+                    // 右スワイプ：前のカードへ
+                    prevCard();
+                } else {
+                    // 左スワイプ：次のカードへ
+                    nextCard();
+                }
+            } else {
+                // タップ：1つ表示
+                revealNextItem();
+            }
         }
         isLongPress = false;
-    });
+    }, { passive: true });
 
     // タッチキャンセル
-    display.addEventListener('touchcancel', () => {
+    studyContent.addEventListener('touchcancel', () => {
         clearTimeout(longPressTimer);
         clearInterval(longPressInterval);
         isLongPress = false;
     });
 
-    // クリックで1つ表示（PC用）
+    // PC用：クリックで1つ表示
     display.addEventListener('click', (e) => {
-        // blank要素やfulltext-char要素のクリックは除外
-        if (!e.target.classList.contains('blank') && !e.target.classList.contains('fulltext-char')) {
-            revealNextItem();
-        }
+        revealNextItem();
     });
 
-    // blank/charを直接クリックで表示
-    display.addEventListener('click', (e) => {
-        if (e.target.classList.contains('blank') && e.target.classList.contains('hidden')) {
-            e.target.classList.remove('hidden');
-            e.target.classList.add('revealed');
-            currentBlankIndex = parseInt(e.target.dataset.index) + 1;
-        }
-        if (e.target.classList.contains('fulltext-char') && e.target.classList.contains('hidden')) {
-            e.target.classList.remove('hidden');
-            e.target.classList.add('revealed');
-            currentBlankIndex = parseInt(e.target.dataset.index) + 1;
-        }
+    // PC用：マウス長押し
+    let mouseDownTimer = null;
+    let mouseDownInterval = null;
+
+    display.addEventListener('mousedown', (e) => {
+        mouseDownTimer = setTimeout(() => {
+            mouseDownInterval = setInterval(() => {
+                revealNextItem();
+            }, 80);
+        }, 300);
     });
 
-    function handleSwipe() {
-        const swipeThreshold = 50;
-        const diff = touchEndX - touchStartX;
+    display.addEventListener('mouseup', () => {
+        clearTimeout(mouseDownTimer);
+        clearInterval(mouseDownInterval);
+    });
 
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
-                // 右スワイプ：前に戻る
-                revealPrevious();
-            } else {
-                // 左スワイプ：次を表示
-                revealNext();
-            }
-        }
-    }
+    display.addEventListener('mouseleave', () => {
+        clearTimeout(mouseDownTimer);
+        clearInterval(mouseDownInterval);
+    });
 
     // ボタンでも操作可能
-    document.getElementById('prev-blank-btn').addEventListener('click', revealPrevious);
-    document.getElementById('next-blank-btn').addEventListener('click', revealNext);
+    document.getElementById('prev-blank-btn').addEventListener('click', prevCard);
+    document.getElementById('next-blank-btn').addEventListener('click', nextCard);
 }
 
 // 1つだけ表示（長押し・クリック用）
@@ -890,67 +900,28 @@ function revealNextItem() {
     if (!card) return;
 
     if (card.mode === 'fillblank') {
-        const blanks = document.querySelectorAll('.blank');
-        if (currentBlankIndex < blanks.length) {
-            blanks[currentBlankIndex].classList.remove('hidden');
-            blanks[currentBlankIndex].classList.add('revealed');
+        const blanks = document.querySelectorAll('.blank.hidden');
+        if (blanks.length > 0) {
+            blanks[0].classList.remove('hidden');
+            blanks[0].classList.add('revealed');
             currentBlankIndex++;
         }
     } else {
-        const chars = document.querySelectorAll('.fulltext-char');
-        if (currentBlankIndex < chars.length) {
-            chars[currentBlankIndex].classList.remove('hidden');
-            chars[currentBlankIndex].classList.add('revealed');
+        const chars = document.querySelectorAll('.fulltext-char.hidden');
+        if (chars.length > 0) {
+            chars[0].classList.remove('hidden');
+            chars[0].classList.add('revealed');
             currentBlankIndex++;
         }
     }
 }
 
-// 次を表示
-function revealNext() {
-    const card = currentStudyCards[currentCardIndex];
-    
-    if (card.mode === 'fillblank') {
-        const blanks = document.querySelectorAll('.blank');
-        if (currentBlankIndex < blanks.length) {
-            blanks[currentBlankIndex].classList.remove('hidden');
-            blanks[currentBlankIndex].classList.add('revealed');
-            currentBlankIndex++;
-        } else {
-            // 次のカードへ
-            nextCard();
-        }
-    } else {
-        const chars = document.querySelectorAll('.fulltext-char');
-        if (currentBlankIndex < chars.length) {
-            chars[currentBlankIndex].classList.remove('hidden');
-            chars[currentBlankIndex].classList.add('revealed');
-            currentBlankIndex++;
-        } else {
-            // 次のカードへ
-            nextCard();
-        }
-    }
-}
-
-// 前に戻る
-function revealPrevious() {
-    const card = currentStudyCards[currentCardIndex];
-    
-    if (card.mode === 'fillblank') {
-        const blanks = document.querySelectorAll('.blank');
-        if (currentBlankIndex > 0) {
-            currentBlankIndex--;
-            blanks[currentBlankIndex].classList.remove('revealed');
-            blanks[currentBlankIndex].classList.add('hidden');
-        }
-    } else {
-        const chars = document.querySelectorAll('.fulltext-char');
-        if (currentBlankIndex > 0) {
-            currentBlankIndex--;
-            chars[currentBlankIndex].classList.remove('revealed');
-            chars[currentBlankIndex].classList.add('hidden');
-        }
+// 前のカードへ
+function prevCard() {
+    if (currentCardIndex > 0) {
+        currentCardIndex--;
+        currentBlankIndex = 0;
+        displayCard();
     }
 }
 
