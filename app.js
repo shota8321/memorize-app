@@ -790,108 +790,98 @@ function displayFullTextCard(card, display) {
 }
 
 // スワイプ操作・長押し設定
+let longPressTimer = null;
+let longPressInterval = null;
+let isLongPress = false;
+let touchStartX = 0;
+
 function setupSwipeControls() {
-    const studyContent = document.querySelector('.study-content');
-    const display = document.getElementById('card-display');
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchEndX = 0;
-    let longPressTimer = null;
-    let longPressInterval = null;
-    let isLongPress = false;
+    const studyView = document.getElementById('study-view');
 
-    // 学習コンテンツ全体でタッチイベントを処理
-    studyContent.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-        touchStartY = e.changedTouches[0].screenY;
-        isLongPress = false;
+    // タッチ開始
+    studyView.addEventListener('touchstart', handleTouchStart, false);
+    studyView.addEventListener('touchend', handleTouchEnd, false);
+    studyView.addEventListener('touchcancel', handleTouchCancel, false);
 
-        // 長押し検出（300ms後に開始）
-        longPressTimer = setTimeout(() => {
-            isLongPress = true;
-            // 最初に1つ表示
-            revealNextItem();
-            // 長押し中は80msごとに次を表示
-            longPressInterval = setInterval(() => {
-                revealNextItem();
-            }, 80);
-        }, 300);
-    }, { passive: true });
-
-    // タッチ移動（スワイプ検出のためタイマーをクリア）
-    studyContent.addEventListener('touchmove', (e) => {
-        const currentX = e.changedTouches[0].screenX;
-        const currentY = e.changedTouches[0].screenY;
-        if (Math.abs(currentX - touchStartX) > 30 || Math.abs(currentY - touchStartY) > 30) {
-            clearTimeout(longPressTimer);
-            clearInterval(longPressInterval);
-        }
-    }, { passive: true });
-
-    // タッチ終了
-    studyContent.addEventListener('touchend', (e) => {
-        clearTimeout(longPressTimer);
-        clearInterval(longPressInterval);
-
-        touchEndX = e.changedTouches[0].screenX;
-
-        if (!isLongPress) {
-            const diff = touchEndX - touchStartX;
-            const swipeThreshold = 50;
-
-            if (Math.abs(diff) > swipeThreshold) {
-                if (diff > 0) {
-                    // 右スワイプ：前のカードへ
-                    prevCard();
-                } else {
-                    // 左スワイプ：次のカードへ
-                    nextCard();
-                }
-            } else {
-                // タップ：1つ表示
-                revealNextItem();
-            }
-        }
-        isLongPress = false;
-    }, { passive: true });
-
-    // タッチキャンセル
-    studyContent.addEventListener('touchcancel', () => {
-        clearTimeout(longPressTimer);
-        clearInterval(longPressInterval);
-        isLongPress = false;
-    });
-
-    // PC用：クリックで1つ表示
-    display.addEventListener('click', (e) => {
+    // PC用クリック
+    document.getElementById('card-display').addEventListener('click', () => {
         revealNextItem();
     });
 
-    // PC用：マウス長押し
-    let mouseDownTimer = null;
-    let mouseDownInterval = null;
+    // PC用マウス長押し
+    document.getElementById('card-display').addEventListener('mousedown', handleMouseDown);
+    document.getElementById('card-display').addEventListener('mouseup', handleMouseUp);
+    document.getElementById('card-display').addEventListener('mouseleave', handleMouseUp);
 
-    display.addEventListener('mousedown', (e) => {
-        mouseDownTimer = setTimeout(() => {
-            mouseDownInterval = setInterval(() => {
-                revealNextItem();
-            }, 80);
-        }, 300);
-    });
-
-    display.addEventListener('mouseup', () => {
-        clearTimeout(mouseDownTimer);
-        clearInterval(mouseDownInterval);
-    });
-
-    display.addEventListener('mouseleave', () => {
-        clearTimeout(mouseDownTimer);
-        clearInterval(mouseDownInterval);
-    });
-
-    // ボタンでも操作可能
+    // ボタン
     document.getElementById('prev-blank-btn').addEventListener('click', prevCard);
     document.getElementById('next-blank-btn').addEventListener('click', nextCard);
+}
+
+function handleTouchStart(e) {
+    // ボタンやモーダル内のタッチは無視
+    if (e.target.closest('.control-btn') || e.target.closest('.modal')) {
+        return;
+    }
+
+    touchStartX = e.touches[0].clientX;
+    isLongPress = false;
+
+    // 長押し開始（200ms後）
+    longPressTimer = setTimeout(() => {
+        isLongPress = true;
+        revealNextItem();
+        // 連続表示（60msごと）
+        longPressInterval = setInterval(() => {
+            revealNextItem();
+        }, 60);
+    }, 200);
+}
+
+function handleTouchEnd(e) {
+    clearTimeout(longPressTimer);
+    clearInterval(longPressInterval);
+
+    if (e.target.closest('.control-btn') || e.target.closest('.modal')) {
+        return;
+    }
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchEndX - touchStartX;
+
+    if (!isLongPress) {
+        if (diff > 60) {
+            // 右スワイプ：前のカード
+            prevCard();
+        } else if (diff < -60) {
+            // 左スワイプ：次のカード
+            nextCard();
+        } else {
+            // タップ：1つ表示
+            revealNextItem();
+        }
+    }
+
+    isLongPress = false;
+}
+
+function handleTouchCancel() {
+    clearTimeout(longPressTimer);
+    clearInterval(longPressInterval);
+    isLongPress = false;
+}
+
+function handleMouseDown() {
+    longPressTimer = setTimeout(() => {
+        longPressInterval = setInterval(() => {
+            revealNextItem();
+        }, 60);
+    }, 200);
+}
+
+function handleMouseUp() {
+    clearTimeout(longPressTimer);
+    clearInterval(longPressInterval);
 }
 
 // 1つだけ表示（長押し・クリック用）

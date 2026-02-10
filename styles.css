@@ -277,6 +277,8 @@ textarea.input {
     padding: 10px 0;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -290,7 +292,14 @@ textarea.input {
     line-height: 1.8;
     color: #333;
     position: relative;
-    touch-action: manipulation;
+    touch-action: pan-x pan-y;
+}
+
+#study-view {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .blank {
