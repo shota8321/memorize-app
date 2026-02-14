@@ -831,10 +831,10 @@ function handleTouchStart(e) {
     longPressTimer = setTimeout(() => {
         isLongPress = true;
         revealNextItem();
-        // 連続表示（150msごと）
+        // 連続表示（300msごと）
         longPressInterval = setInterval(() => {
             revealNextItem();
-        }, 150);
+        }, 300);
     }, 200);
 }
 
@@ -875,7 +875,7 @@ function handleMouseDown() {
     longPressTimer = setTimeout(() => {
         longPressInterval = setInterval(() => {
             revealNextItem();
-        }, 150);
+        }, 300);
     }, 200);
 }
 
